@@ -6,7 +6,7 @@ import requests
 import time
 import io
 from datetime import datetime
-from tflite_runtime.interpreter import Interpreter  # Adjusted import for TensorFlow Lite
+import tensorflow as tf
 from picamera2 import Picamera2
 from libcamera import controls
 
@@ -20,7 +20,9 @@ class FoodDetector:
     
     def load_model(self):
         """Load the TFLite model"""
-        interpreter = Interpreter(model_path="model.tflite")
+        # In a real app, you would load your actual model here
+        # For demo purposes, we'll use a placeholder
+        interpreter = tf.lite.Interpreter(model_path="model.tflite")
         interpreter.allocate_tensors()
         return interpreter
     
@@ -50,6 +52,7 @@ class FoodDetector:
     def detect_food(self, image):
         """Detect food from image using the model"""
         try:
+            # Get model input details
             input_details = self.model.get_input_details()
             output_details = self.model.get_output_details()
             input_shape = input_details[0]['shape'][1:3]
@@ -70,7 +73,7 @@ class FoodDetector:
             probability = outputs[0][max_index]
             
             # Apply confidence threshold
-            if probability < 0.5:
+            if probability < 0.5:  # 50% confidence threshold
                 return None, 0.0
                 
             return tag, probability
@@ -108,8 +111,13 @@ def capture_image():
             
         # Capture image
         image_array = camera.capture_array()
+        
+        # Convert to RGB (OpenCV uses BGR by default)
         image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+        
+        # Convert to PIL Image
         image = Image.fromarray(image_array)
+        
         return image
         
     except Exception as e:
@@ -131,6 +139,8 @@ col1, col2 = st.columns([1, 1], gap="large")
 # Column 1: Image Capture and Detection
 with col1:
     st.header("Food Detection")
+    
+    # Image upload/capture options
     capture_option = st.radio(
         "How would you like to provide the food image?",
         ("Upload an image", "Capture from Raspberry Pi Camera")
@@ -177,6 +187,8 @@ with col1:
 with col2:
     if 'detected_food' in st.session_state:
         st.header("Nutritional Information")
+        
+        # Display detected food
         st.subheader("Detected Food")
         col_img, col_info = st.columns([1, 2])
         with col_img:
@@ -223,6 +235,7 @@ with col2:
                 cols[0].metric("Calories", f"{calories:.1f} kcal")
                 cols[1].metric("Calories per 100g", f"{food_data['calories']} kcal")
                 
+                # Health indicator
                 if food_data['healthy']:
                     st.success("This is a healthy food choice!")
                 else:
@@ -246,3 +259,9 @@ st.markdown("""
 # Clean up camera when the app is closed
 def cleanup():
     global camera
+    if camera is not None:
+        camera.stop()
+        camera.close()
+
+import atexit
+atexit.register(cleanup)
