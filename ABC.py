@@ -7,27 +7,27 @@ import time
 import io
 from datetime import datetime
 import tensorflow as tf
+from picamera2 import Picamera2
+from libcamera import controls
 
-# Initialize Session State variables
-if "food_image" not in st.session_state:
-    st.session_state.food_image = None
-
-if "detected_food" not in st.session_state:
-    st.session_state.detected_food = None
-
-# Mock food recognition model
+# Mock food recognition model (replace with your actual model)
 class FoodDetector:
     def __init__(self):
+        # Load model and labels
         self.model = self.load_model()
         self.labels = self.load_labels()
         self.food_db = self.load_food_database()
     
     def load_model(self):
+        """Load the TFLite model"""
+        # In a real app, you would load your actual model here
+        # For demo purposes, we'll use a placeholder
         interpreter = tf.lite.Interpreter(model_path="model.tflite")
         interpreter.allocate_tensors()
         return interpreter
     
     def load_labels(self):
+        """Load food labels from file"""
         return [
             "Apple", "Banana", "Burger", "Chocolate", 
             "Chocolate Donut", "French Fries", "Fruit Oatmeal",
@@ -35,6 +35,7 @@ class FoodDetector:
         ]
     
     def load_food_database(self):
+        """Load food calorie database"""
         return {
             "Apple": {"calories": 52, "healthy": True},
             "Banana": {"calories": 89, "healthy": True},
@@ -49,24 +50,30 @@ class FoodDetector:
         }
     
     def detect_food(self, image):
+        """Detect food from image using the model"""
         try:
+            # Get model input details
             input_details = self.model.get_input_details()
             output_details = self.model.get_output_details()
             input_shape = input_details[0]['shape'][1:3]
             
+            # Preprocess image
             image = image.resize(input_shape)
             input_array = np.array(image, dtype=np.float32)[np.newaxis, :, :, :]
             input_array = input_array[:, :, :, (2, 1, 0)]  # Convert to BGR
             
+            # Run inference
             self.model.set_tensor(input_details[0]['index'], input_array)
             self.model.invoke()
             
+            # Get results
             outputs = self.model.get_tensor(output_details[0]['index'])
             max_index = np.argmax(outputs[0])
             tag = self.labels[max_index]
             probability = outputs[0][max_index]
             
-            if probability < 0.5:
+            # Apply confidence threshold
+            if probability < 0.5:  # 50% confidence threshold
                 return None, 0.0
                 
             return tag, probability
@@ -75,99 +82,174 @@ class FoodDetector:
             st.error(f"Detection error: {str(e)}")
             return None, 0.0
 
-detector = FoodDetector()
+class PiCameraHandler:
+    def __init__(self):
+        self.cam = None
+        try:
+            self.cam = Picamera2()
+            self.cam_config = self.cam.create_still_configuration()
+            self.cam.configure(self.cam_config)
+            self.cam.start()
+        except Exception as e:
+            st.error(f"Failed to initialize camera: {str(e)}")
+    
+    def capture_image(self):
+        """Capture an image from the Pi camera"""
+        if self.cam is None:
+            st.error("Camera not initialized")
+            return None
+        
+        try:
+            # Set autofocus mode
+            self.cam.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+            time.sleep(2)  # Allow time for autofocus
+            
+            # Capture image
+            image_array = self.cam.capture_array()
+            
+            # Convert to PIL Image
+            image = Image.fromarray(cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB))
+            return image
+        except Exception as e:
+            st.error(f"Error capturing image: {str(e)}")
+            return None
+    
+    def __del__(self):
+        if self.cam is not None:
+            self.cam.stop()
 
-# App configuration
+# Initialize the detector and camera handler
+detector = FoodDetector()
+camera_handler = PiCameraHandler()
+
+# Streamlit app layout
 st.set_page_config(page_title="Food Calorie Calculator", layout="wide")
 
-# Main UI
+# Title and description
 st.title("🍏 Food Calorie Calculator")
-st.markdown("Capture an image of your food to detect and calculate nutritional information.")
+st.markdown("""
+Capture an image of your food to detect what it is and calculate its nutritional information.
+""")
 
+# Create two main columns
 col1, col2 = st.columns([1, 1], gap="large")
 
-# Image Input Column
+# Column 1: Image Capture and Detection
 with col1:
     st.header("Food Detection")
+    
+    # Image upload/capture options
     capture_option = st.radio(
-        "Input method:",
-        ("Upload an image", "Capture from Raspberry Pi Pico")
+        "How would you like to provide the food image?",
+        ("Upload an image", "Capture from Raspberry Pi Camera")
     )
     
     if capture_option == "Upload an image":
-        uploaded_file = st.file_uploader("Choose food image...", type=["jpg", "jpeg", "png"])
-        if uploaded_file:
-            st.session_state.food_image = Image.open(uploaded_file)
-            st.image(st.session_state.food_image, caption="Uploaded Food Image", use_column_width=True)
+        uploaded_file = st.file_uploader("Choose a food image...", type=["jpg", "jpeg", "png"])
+        if uploaded_file is not None:
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded Food Image", use_column_width=True)
             
             if st.button("Detect Food"):
-                with st.spinner("Analyzing..."):
-                    detected_food, confidence = detector.detect_food(st.session_state.food_image)
+                with st.spinner("Detecting food..."):
+                    detected_food, confidence = detector.detect_food(image)
+                    
                     if detected_food:
+                        st.success(f"Detected: {detected_food} (Confidence: {confidence:.1%})")
                         st.session_state.detected_food = detected_food
-                        st.success(f"Detected: {detected_food} ({confidence:.1%} confidence)")
+                        st.session_state.food_image = image
                     else:
-                        st.session_state.detected_food = None
-                        st.warning("No confident detection")
-    else:
-        st.markdown("### Raspberry Pi Pico Integration")
-        st.info("Demo placeholder - actual implementation would connect to Pico hardware")
+                        st.warning("No food item detected with sufficient confidence")
+    
+    else:  # Raspberry Pi Camera capture
+        st.markdown("### Raspberry Pi Camera Capture")
         
-        if st.button("Simulate Pico Capture"):
-            try:
-                st.session_state.food_image = Image.open("demo_food.jpg")
-                st.image(st.session_state.food_image, caption="Simulated Capture", use_column_width=True)
-                st.session_state.detected_food = "Apple"  # Demo value
-                st.success("Demo detection: Apple (95% confidence)")
-            except FileNotFoundError:
-                st.error("Demo image not found")
+        if st.button("Capture Image"):
+            with st.spinner("Capturing image..."):
+                captured_image = camera_handler.capture_image()
+                
+                if captured_image is not None:
+                    st.image(captured_image, caption="Captured Food Image", use_column_width=True)
+                    
+                    # Detect food immediately after capture
+                    detected_food, confidence = detector.detect_food(captured_image)
+                    
+                    if detected_food:
+                        st.success(f"Detected: {detected_food} (Confidence: {confidence:.1%})")
+                        st.session_state.detected_food = detected_food
+                        st.session_state.food_image = captured_image
+                    else:
+                        st.warning("No food item detected with sufficient confidence")
 
-# Results Column
+# Column 2: Portion Input and Results
 with col2:
-    if st.session_state.food_image is not None:
-        st.header("Nutritional Analysis")
+    if 'detected_food' in st.session_state:
+        st.header("Nutritional Information")
         
-        st.subheader("Detection Results")
+        # Display detected food
+        st.subheader("Detected Food")
         col_img, col_info = st.columns([1, 2])
         with col_img:
             st.image(st.session_state.food_image, width=150)
         with col_info:
-            if st.session_state.detected_food:
-                food_data = detector.food_db.get(st.session_state.detected_food)
-                status = "✅ Healthy" if food_data['healthy'] else "⚠️ Unhealthy"
-                st.markdown(f"""
-                **{st.session_state.detected_food}**  
-                {status}
-                """)
+            st.markdown(f"**{st.session_state.detected_food}**")
+            food_data = detector.food_db.get(st.session_state.detected_food)
+            if food_data['healthy']:
+                st.success("✅ Healthy food")
+            else:
+                st.warning("⚠️ Not recommended for frequent consumption")
         
-        st.subheader("Portion Analysis")
-        portion = st.selectbox(
-            "Portion size:",
-            ["Small (50g)", "Medium (100g)", "Custom"],
+        # Portion input
+        st.subheader("Portion Details")
+        portion_option = st.selectbox(
+            "Select portion size:",
+            ["Custom", "Small (50g)", "Medium (100g)", "Large (150g)"],
             index=1
         )
         
-        weight = 100  # Default
-        if portion == "Small (50g)":
+        if portion_option == "Custom":
+            weight = st.number_input("Enter weight (grams):", min_value=1, value=100)
+        elif portion_option == "Small (50g)":
             weight = 50
-        elif portion == "Custom":
-            weight = st.number_input("Enter grams:", min_value=1, value=100)
+        elif portion_option == "Medium (100g)":
+            weight = 100
+        else:  # Large
+            weight = 150
         
-        if st.button("Calculate"):
-            if st.session_state.detected_food:
-                food_data = detector.food_db.get(st.session_state.detected_food)
-                if food_data:
-                    calories = (food_data['calories'] * weight) / 100
-                    cols = st.columns(2)
-                    cols[0].metric("Total Calories", f"{calories:.1f} kcal")
-                    cols[1].metric("Per 100g", f"{food_data['calories']} kcal")
+        # Calculate calories
+        if st.button("Calculate Nutrition"):
+            food_data = detector.food_db.get(st.session_state.detected_food)
+            if food_data:
+                calories = (food_data['calories'] * weight) / 100
+                
+                # Display results
+                st.subheader("Nutritional Information")
+                
+                cols = st.columns(2)
+                cols[0].metric("Food", st.session_state.detected_food)
+                cols[1].metric("Weight", f"{weight}g")
+                
+                cols = st.columns(2)
+                cols[0].metric("Calories", f"{calories:.1f} kcal")
+                cols[1].metric("Calories per 100g", f"{food_data['calories']} kcal")
+                
+                # Health indicator
+                if food_data['healthy']:
+                    st.success("This is a healthy food choice!")
                 else:
-                    st.error("Nutrition data unavailable")
+                    st.warning("Consider healthier alternatives for frequent consumption")
             else:
-                st.warning("No food detected")
+                st.error("Nutritional data not available for this food item")
     else:
-        st.info("👈 Capture or upload a food image to begin analysis")
+        st.header("Nutritional Information")
+        st.info("Please detect a food item first to see nutritional information")
 
 # Footer
 st.markdown("---")
-st.caption("Note: This is a demo application. Consult a nutritionist for accurate dietary advice.")
+st.markdown("""
+**How to use:**
+1. Upload or capture an image of your food
+2. The system will detect what food it is
+3. Select the portion size
+4. View the calculated nutritional information
+""")
