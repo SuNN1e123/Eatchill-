@@ -3,4 +3,5 @@ tensorflow
 opencv-python-headless
 pillow
 numpy
+picamera2
 requests
