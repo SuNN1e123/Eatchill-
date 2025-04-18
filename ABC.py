@@ -7,7 +7,7 @@ import io
 from datetime import datetime
 from tflite_runtime.interpreter import Interpreter
 from picamera2 import Picamera2
-from libcamera import controls
+import atexit
 
 class FoodDetector:
     def __init__(self):
@@ -75,7 +75,7 @@ class FoodDetector:
             probability = outputs[0][max_index]
             
             return (tag, probability) if probability >= 0.5 else (None, 0.0)
-            
+        
         except Exception as e:
             st.error(f"Detection error: {str(e)}")
             return None, 0.0
@@ -102,7 +102,7 @@ def capture_image():
     try:
         if not init_camera():
             return None
-            
+        
         array = camera.capture_array()
         image = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
         return Image.fromarray(image)
@@ -118,7 +118,7 @@ st.set_page_config(page_title="RPi Food Analyzer", layout="wide")
 try:
     detector = FoodDetector()
 except Exception as e:
-    st.error(f""
+    st.error(f"""
     Critical error: {str(e)}
     Please ensure:
     1. model.tflite exists in current directory
@@ -135,8 +135,7 @@ col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.header("Image Input")
-    input_method = st.radio("Select input method:", 
-                          ["Camera Capture", "Image Upload"])
+    input_method = st.radio("Select input method:", ["Camera Capture", "Image Upload"])
     
     img_data = None
     
@@ -148,22 +147,17 @@ with col1:
                     st.session_state.food_image = img_data
     
     else:
-        uploaded_file = st.file_uploader("Upload food image:", 
-                                       type=["jpg", "jpeg", "png"])
+        uploaded_file = st.file_uploader("Upload food image:", type=["jpg", "jpeg", "png"])
         if uploaded_file:
             img_data = Image.open(uploaded_file)
             st.session_state.food_image = img_data
     
     if 'food_image' in st.session_state:
-        st.image(st.session_state.food_image, 
-                caption="Food Image", 
-                use_column_width=True)
+        st.image(st.session_state.food_image, caption="Food Image", use_column_width=True)
         
         if st.button("Analyze Food"):
             with st.spinner("Analyzing..."):
-                food, confidence = detector.detect_food(
-                    st.session_state.food_image
-                )
+                food, confidence = detector.detect_food(st.session_state.food_image)
                 if food:
                     st.session_state.detected_food = food
                     st.success(f"Detected: {food} ({confidence:.0%} confidence)")
@@ -187,21 +181,16 @@ with col2:
         with col_a:
             st.metric("Base Calories (100g)", f"{food_data['calories']} kcal")
             st.image(st.session_state.food_image, width=200)
-            
+        
         with col_b:
             health_status = "✅ Healthy" if food_data['healthy'] else "⚠️ Limit Consumption"
             st.metric("Health Status", health_status)
         
         st.subheader("Portion Adjustment")
-        portion = st.radio("Select portion size:",
-                          ["Small (50g)", "Medium (100g)", "Large (150g)", "Custom"],
-                          index=1)
+        portion = st.radio("Select portion size:", ["Small (50g)", "Medium (100g)", "Large (150g)", "Custom"], index=1)
         
         if portion == "Custom":
-            weight = st.number_input("Enter weight (grams):", 
-                                    min_value=1, 
-                                    max_value=1000, 
-                                    value=100)
+            weight = st.number_input("Enter weight (grams):", min_value=1, max_value=1000, value=100)
         else:
             weight = {
                 "Small (50g)": 50,
@@ -222,7 +211,6 @@ with col2:
             st.success("This is a healthy choice! Great for balanced diets.")
         else:
             st.warning("Consider healthier alternatives for regular consumption")
-
     else:
         st.info("Capture or upload a food image to begin analysis")
 
