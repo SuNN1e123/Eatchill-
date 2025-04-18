@@ -1,12 +1,12 @@
-# Core dependencies (work everywhere)
+# Core requirements (work everywhere)
 streamlit>=1.33.0
 Pillow>=9.0.0
 numpy>=1.20.0
 opencv-python-headless>=4.5.0
 
-# Conditional dependencies
-tflite-runtime>=2.5.0,<2.10.0; python_version < '3.12'  # Only for Python 3.9
-picamera2; python_version < '3.12' and sys_platform == 'linux'  # Raspberry Pi only
+# Conditional requirements
+tflite-runtime>=2.5.0,<2.10.0; python_version < '3.12'
+picamera2; python_version < '3.12' and sys_platform == 'linux'
 
-# Mock dependencies (for cloud fallback)
-requests>=2.25.0  # For potential API fallback
+# Fallback requirements
+requests>=2.25.0
