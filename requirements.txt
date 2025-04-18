@@ -1,5 +1,5 @@
 streamlit==1.32.2
-tflite-runtime==2.10.0  # Use this instead of full tensorflow on Raspberry Pi
+tflite-runtime==2.15.0  # Use this instead of full tensorflow on Raspberry Pi
 opencv-python-headless==4.9.0.80  # Headless version for Pi compatibility
 pillow==10.2.0
 numpy==1.26.4
