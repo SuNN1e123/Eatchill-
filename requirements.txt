@@ -1,8 +1,12 @@
-streamlit==1.32.2
-tflite-runtime==2.15.0  # Use this instead of full tensorflow on Raspberry Pi
-opencv-python-headless==4.9.0.80  # Headless version for Pi compatibility
-pillow==10.2.0
-numpy==1.26.4
-requests==2.31.0
-picamera2==0.3.13
-libcamera==0.0.12  # Required for Raspberry Pi camera
+# Core dependencies (work everywhere)
+streamlit>=1.33.0
+Pillow>=9.0.0
+numpy>=1.20.0
+opencv-python-headless>=4.5.0
+
+# Conditional dependencies
+tflite-runtime>=2.5.0,<2.10.0; python_version < '3.12'  # Only for Python 3.9
+picamera2; python_version < '3.12' and sys_platform == 'linux'  # Raspberry Pi only
+
+# Mock dependencies (for cloud fallback)
+requests>=2.25.0  # For potential API fallback
