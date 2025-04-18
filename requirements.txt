@@ -1,12 +1,6 @@
-# Core requirements (work everywhere)
 streamlit
-Pillow>=9.0.0
-numpy>=1.20.0
-opencv-python-headless>=4.5.0
-
-# Conditional requirements
-tflite-runtime>=2.5.0,<2.10.0; python_version < '3.12'
-picamera2; python_version < '3.12' and sys_platform == 'linux'
-
-# Fallback requirements
-requests>=2.25.0
+tensorflow
+opencv-python-headless
+pillow
+numpy
+requests
